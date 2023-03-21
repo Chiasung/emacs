@@ -52,11 +52,12 @@ General steps (for each step, check for possible errors):
       ./autogen.sh
       ./configure --with-native-compilation && make
 
-    For a release (as opposed to pretest), delete any left-over "---"
-    and "+++" markers from etc/NEWS, as well as the "Temporary note"
-    section at the beginning of that file, and commit etc/NEWS if it
-    was modified.  For a bug fix release (e.g. 28.2), delete any empty
-    headlines too.
+    For a release (as opposed to pretest), visit etc/NEWS and use the
+    "M-x emacs-news-delete-temporary-markers" command to delete any
+    left-over "---" and "+++" markers from etc/NEWS, as well as the
+    "Temporary note" section at the beginning of that file, and commit
+    etc/NEWS if it was modified.  For a bug fix release (e.g. 28.2),
+    delete any empty headlines too.
 
 2.  Regenerate the versioned ChangeLog.N and etc/AUTHORS files.
 
@@ -148,6 +149,13 @@ General steps (for each step, check for possible errors):
 
 4.    autoreconf -i -I m4 --force
       make bootstrap
+
+    The below script checks for any mistakes in the source text of
+    manual pages.  Fix any errors and re-run the script to verify.
+
+      ./admin/check-man-pages
+
+    Then do this:
 
       make -C etc/refcards
       make -C etc/refcards clean

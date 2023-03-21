@@ -1,6 +1,6 @@
 ;;; eshell.el --- the Emacs command shell  -*- lexical-binding:t -*-
 
-;; Copyright (C) 1999-2022 Free Software Foundation, Inc.
+;; Copyright (C) 1999-2023 Free Software Foundation, Inc.
 
 ;; Author: John Wiegley <johnw@gnu.org>
 ;; Version: 2.4.2
@@ -194,26 +194,16 @@ shells such as bash, zsh, rc, 4dos."
 ;; The following user options modify the behavior of Eshell overall.
 (defvar eshell-buffer-name)
 
-(defun eshell-add-to-window-buffer-names ()
-  "Add `eshell-buffer-name' to `same-window-buffer-names'."
-  (declare (obsolete nil "24.3"))
-  (add-to-list 'same-window-buffer-names eshell-buffer-name))
-
-(defun eshell-remove-from-window-buffer-names ()
-  "Remove `eshell-buffer-name' from `same-window-buffer-names'."
-  (declare (obsolete nil "24.3"))
-  (setq same-window-buffer-names
-	(delete eshell-buffer-name same-window-buffer-names)))
-
 (defcustom eshell-load-hook nil
   "A hook run once Eshell has been loaded."
   :type 'hook
   :group 'eshell)
 
-(defcustom eshell-unload-hook '(eshell-unload-all-modules)
+(defcustom eshell-unload-hook nil
   "A hook run when Eshell is unloaded from memory."
   :type 'hook
   :group 'eshell)
+(make-obsolete-variable 'eshell-unload-hook nil "30.1")
 
 (defcustom eshell-buffer-name "*eshell*"
   "The basename used for Eshell buffers.
@@ -260,7 +250,7 @@ information on Eshell, see Info node `(eshell)Top'."
 		   (t
 		    (get-buffer-create eshell-buffer-name)))))
     (cl-assert (and buf (buffer-live-p buf)))
-    (pop-to-buffer-same-window buf)
+    (pop-to-buffer buf display-comint-buffer-action)
     (unless (derived-mode-p 'eshell-mode)
       (eshell-mode))
     buf))
@@ -278,10 +268,7 @@ information on Eshell, see Info node `(eshell)Top'."
 (define-obsolete-function-alias 'eshell-return-exits-minibuffer
   #'eshell-command-mode "28.1")
 
-(defvar eshell-non-interactive-p nil
-  "A variable which is non-nil when Eshell is not running interactively.
-Modules should use this variable so that they don't clutter
-non-interactive sessions, such as when using `eshell-command'.")
+(defvar eshell-non-interactive-p)       ; Defined in esh-mode.el.
 
 (declare-function eshell-add-input-to-history "em-hist" (input))
 
@@ -332,9 +319,9 @@ With prefix ARG, insert output into the current buffer at point."
 	;; make the output as attractive as possible, with no
 	;; extraneous newlines
 	(when intr
-	  (if (eshell-interactive-process)
-	      (eshell-wait-for-process (eshell-interactive-process)))
-	  (cl-assert (not (eshell-interactive-process)))
+	  (if (eshell-interactive-process-p)
+	      (eshell-wait-for-process (eshell-tail-process)))
+	  (cl-assert (not (eshell-interactive-process-p)))
 	  (goto-char (point-max))
 	  (while (and (bolp) (not (bobp)))
 	    (delete-char -1)))
@@ -384,28 +371,14 @@ corresponding to a successful execution."
 	      (set status-var eshell-last-command-status))
 	  (cadr result))))))
 
-;;; Code:
-
-(defun eshell-unload-all-modules ()
-  "Unload all modules that were loaded by Eshell, if possible.
-If the user has require'd in any of the modules, or customized a
-variable with a :require tag (such as `eshell-prefer-to-shell'), it
-will be impossible to unload Eshell completely without restarting
-Emacs."
-  ;; if the user set `eshell-prefer-to-shell' to t, but never loaded
-  ;; Eshell, then `eshell-subgroups' will be unbound
-  (when (fboundp 'eshell-subgroups)
-    (dolist (module (eshell-subgroups 'eshell))
-      ;; this really only unloads as many modules as possible,
-      ;; since other `require' references (such as by customizing
-      ;; `eshell-prefer-to-shell' to a non-nil value) might make it
-      ;; impossible to unload Eshell completely
-      (if (featurep module)
-	  (ignore-errors
-	    (message "Unloading %s..." (symbol-name module))
-	    (unload-feature module)
-	    (message "Unloading %s...done" (symbol-name module)))))
-    (message "Unloading eshell...done")))
+(defun eshell-unload-function ()
+  (eshell-unload-extension-modules)
+  ;; Wait to unload core modules until after `eshell' has finished
+  ;; unloading.  `eshell' depends on several of them, so they can't be
+  ;; unloaded immediately.
+  (run-at-time 0 nil #'eshell-unload-modules
+               (reverse (eshell-subgroups 'eshell)) 'core)
+  nil)
 
 (run-hooks 'eshell-load-hook)
 
